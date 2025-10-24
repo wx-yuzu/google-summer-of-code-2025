@@ -3,17 +3,16 @@ from typing import List
 
 import numpy
 import torch
-from PIL import Image
-from torchvision.transforms.functional import to_tensor
-from transformers import AutoModelForCausalLM, AutoProcessor
-from ultralytics import YOLOE, YOLOWorld
-
 from ir.model_output_ir import NormalizedDetections
 from models.annotation_models.base import (
     AnnotationModel,
     OpenVocabularyAnnotationModel
 )
 from ontology.detection_ontology import DetectionOntology
+from PIL import Image
+from torchvision.transforms.functional import to_tensor
+from transformers import AutoModelForCausalLM, AutoProcessor
+from ultralytics import YOLOE, YOLOWorld
 
 ANNOTATOR_REGISTRY = {}
 
@@ -102,7 +101,7 @@ class YoloeAnnotationModel(AnnotationModel):
 @register_annotator("florence-2-large")
 class Florence2(OpenVocabularyAnnotationModel):
     # [TODO] 'cuda'->'cpu'
-    def __init__(self, ontology=None, ontology_yaml_path=None, device="cuda"):
+    def __init__(self, ontology=None, ontology_yaml_path=None, device="cpu"):
         model_id = "microsoft/Florence-2-large"
         self.model = (
             AutoModelForCausalLM.from_pretrained(
@@ -132,46 +131,58 @@ class Florence2(OpenVocabularyAnnotationModel):
         self,
         image,
         task_prompt="<OPEN_VOCABULARY_DETECTION>",
-        text_input=None,
         max_new_tokens=1024,
+        label_multi_class_at_once=False,
     ):
-        if text_input is None:
-            prompt = task_prompt
-        else:
-            prompt = task_prompt + text_input
 
-        if self.ontology is None:
-            prompt = task_prompt
-        else:
-            text_input = "/".join(self.class_prompts)
-            prompt = task_prompt + text_input
-        inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(
-            self.device, torch.float16
-        )
-        generated_ids = self.model.generate(
-            input_ids=inputs["input_ids"].to(self.device),
-            pixel_values=inputs["pixel_values"].to(self.device),
-            max_new_tokens=max_new_tokens,
-        )
-        generated_text = self.processor.batch_decode(
-            generated_ids, skip_special_tokens=False
-        )[0]
-        parsed_answer = self.processor.post_process_generation(
-            generated_text, task=task_prompt, image_size=(image.width, image.height)
-        )
+        # prediction pipeline
+        def infer(image, prompt):
+            inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(
+                self.device, torch.float16
+            )
+            generated_ids = self.model.generate(
+                input_ids=inputs["input_ids"].to(self.device),
+                pixel_values=inputs["pixel_values"].to(self.device),
+                max_new_tokens=max_new_tokens,
+            )
+            generated_text = self.processor.batch_decode(
+                generated_ids, skip_special_tokens=False
+            )[0]
+            parsed_answer = self.processor.post_process_generation(
+                generated_text, task=task_prompt, image_size=(image.width, image.height)
+            )
 
-        anns = parsed_answer[task_prompt]
-        bboxes = anns["bboxes"]
-        labels = anns["bboxes_labels"]
+            anns = parsed_answer[task_prompt]
+            return anns
 
-        # [TODO] Implement this
+        if self.ontology:
+            if label_multi_class_at_once:
+                class_prompts = [" <and> ".join(self.class_prompts)]
+            else:
+                # Florence2 supports inference across multiple classes, but it tends to detect only one instance per class, which hurts accuracy.
+                # Running inference separately for each class takes more time, but it yields more reliable results.
+                class_prompts = [p for p in self.class_prompts]
+
+        bboxes, labels = [], []
+        for cls_prompt in class_prompts:
+            text_input = task_prompt + " " + cls_prompt
+            anns = infer(image=image, prompt=text_input)
+            bboxes += anns["bboxes"]
+            _raw_labels = anns["bboxes_labels"]
+            labels += [
+                cls_prompt for _ in range(len(_raw_labels))
+            ]  # モデルのラベルに表記の揺れがあるため手動でclass_promptに統一
+
         if self.ontology:
             labels = self.rename_class(labels)
-            class_ids = [self.ontology.get_class(lab) for lab in labels]
+            output_class_labels = [self.ontology.get_class(lab) for lab in labels]
+            output_class_ids = [
+                self.ontology.reverse_class_names[lab] for lab in output_class_labels
+            ]
 
         return NormalizedDetections(
             xyxy=numpy.array(bboxes),
-            cls=numpy.array(class_ids),
+            cls=numpy.array(output_class_ids),
             box_mode="XYXY_ABS",
             orig_img=image,
             input_shape=image.shape,
@@ -234,7 +245,7 @@ def test_florence2():
             }
         )
     )
-    img = Image.open("./src/tests/mock_grapes_datasets/green_grapes.jpg")
+    img = Image.open("./src/tests/mock_grapes_datasets/grapes.jpg")
     result = annotator.annotate(img)
     print(result)
 
