@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+*.pt
+dataset/
+runs/
+test/mock_datasets/
+src/test/mock_data
+src/test/mock_grape*
+weights/
+tests/
+garbage_code/
+
+main_old.py
+main copy.py
+train.py
+
+dump/
+*.png

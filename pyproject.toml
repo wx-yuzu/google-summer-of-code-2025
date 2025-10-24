@@ -1,0 +1,40 @@
+[project]
+name = "gsoc"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "autoflake>=2.3.1",
+    "autopep8>=2.3.2",
+    "black>=25.1.0",
+    "datumaro>=1.10.0",
+    "einops>=0.8.1",
+    "isort>=6.0.1",
+    "lightning>=2.5.5",
+    "onnx>=1.19.0",
+    "opencv-python>=4.11.0.86",
+    "openvino-model-api>=0.3.0.4",
+    "otx[cuda]>=2.4.6",
+    "pydantic>=2.11.7",
+    "pytest>=8.4.1",
+    "scikit-learn>=1.7.1",
+    "segment-anything",
+    "timm>=1.0.19",
+    "torchmetrics>=1.8.0",
+    "transformers==4.49.0",
+    "ultralytics>=8.3.156",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = "src"
+testpaths = ["tests",]
+addopts = [
+    "--import-mode=importlib",
+]
+
+[tool.uv.sources]
+segment-anything = { git = "https://github.com/facebookresearch/segment-anything.git" }
