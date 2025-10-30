@@ -100,7 +100,6 @@ class YoloeAnnotationModel(AnnotationModel):
 
 @register_annotator("florence-2-large")
 class Florence2(OpenVocabularyAnnotationModel):
-    # [TODO] 'cuda'->'cpu'
     def __init__(self, ontology=None, ontology_yaml_path=None, device="cpu"):
         model_id = "microsoft/Florence-2-large"
         self.model = (
@@ -123,9 +122,6 @@ class Florence2(OpenVocabularyAnnotationModel):
             self.ontology = ontology
             self.class_prompts = self.ontology.prompts()
             self.class_labels = self.ontology.classes()
-
-    def rename_class(self, prompt_labels):
-        return []
 
     def annotate(
         self,
@@ -169,20 +165,22 @@ class Florence2(OpenVocabularyAnnotationModel):
             anns = infer(image=image, prompt=text_input)
             bboxes += anns["bboxes"]
             _raw_labels = anns["bboxes_labels"]
-            labels += [
-                cls_prompt for _ in range(len(_raw_labels))
-            ]  # モデルのラベルに表記の揺れがあるため手動でclass_promptに統一
+            # Because the model’s label names are inconsistent, normalize labels with class_prompt.
+            labels += [cls_prompt for _ in range(len(_raw_labels))]
 
         if self.ontology:
-            labels = self.rename_class(labels)
             output_class_labels = [self.ontology.get_class(lab) for lab in labels]
             output_class_ids = [
                 self.ontology.reverse_class_names[lab] for lab in output_class_labels
             ]
 
+        # maybe redundant
+        image = numpy.asarray(image)
+
         return NormalizedDetections(
             xyxy=numpy.array(bboxes),
             cls=numpy.array(output_class_ids),
+            conf=numpy.array([1.0 for _ in range(len(bboxes))]),
             box_mode="XYXY_ABS",
             orig_img=image,
             input_shape=image.shape,
@@ -243,7 +241,8 @@ def test_florence2():
                 "purple grapes": "ripe grapes",
                 "lightgreen grapes": "unripe grapes",
             }
-        )
+        ),
+        device="cuda",
     )
     img = Image.open("./src/tests/mock_grapes_datasets/grapes.jpg")
     result = annotator.annotate(img)
