@@ -36,6 +36,12 @@ sh src/annotation.sh
 
 That’s it — the script will run inference and export annotations according to your configuration.
 
+<!-- !["Image not found."](./resources/example_image.jpg)
+!["Image not found."](./resources/example_annotation.jpg) -->
+
+| Original | Annotation |
+|:--:|:--:|
+| <img src="./resources/image_example.jpg" alt="image example" width="95%"/> | <img src="./resources/annotation_example.jpg" alt="annotation example" width="95%"/> |
 
 
 ## ⚙️ Configuration
@@ -74,7 +80,7 @@ All runtime options are in `src/annotation.sh`. Edit it for your environment.
 --input_dir <path/to/input_image_dir> \
 --output_dir <path/to/output_dir> \
 --weights <path/to/yolo_model_weights> \
---export_format coco
+--export_format yolo
 ```
 
 
@@ -83,13 +89,14 @@ All runtime options are in `src/annotation.sh`. Edit it for your environment.
 
 Open-vocabulary models often respond best to descriptive prompts, while your dataset needs concise, human-friendly labels. The ontology bridges the two.
 
-- Prompts: what the model sees (free-form text)
-- Class labels: what you want in your dataset
+- Prompts: what you want the model to detect
+- Class labels: what you want to label in your dataset
 
-### Example 1: one-to-one mapping
+#### Example 1: one-to-one mapping
 
 ```yaml
 # ontology.yaml
+# prompts: classes
 purple grapes: ripe_grapes
 lightgreen grapes: unripe_grapes
 ```
@@ -100,7 +107,7 @@ Run with:
 ```
 The toolkit will export labels as `ripe_grapes` and `unripe_grapes`.
 
-### Example 2: many prompts → one label (aggregation)
+#### Example 2: many prompts → one label (aggregation)
 
 ```yaml
 purple grapes: grapes
